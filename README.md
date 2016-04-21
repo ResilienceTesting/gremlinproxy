@@ -122,12 +122,12 @@ be subjected to fault injection.
 
 ```DELETE /gremlin/v1/rules```: clear all rules
 
-```GET /gremlin/v1/proxy/:service/instances```: get list of instances for for :service
+```GET /gremlin/v1/proxy/:service/instances```: get list of instances for for ```:service```
 
-```PUT /gremlin/v1/proxy/:service/:instances```: set list of instances for :service. :instances is a comma separated list.
+```PUT /gremlin/v1/proxy/:service/:instances```: set list of instances for ```:service```. ```:instances``` is a comma separated list.
 
-```DELETE /gremlin/v1/proxy/:service/instances```: clear list of instances under :service
+```DELETE /gremlin/v1/proxy/:service/instances```: clear list of instances under ```:service```
 
-```GET /gremlin/v1/test/:id```: set new test :id, that will be logged along with request/response logs
+```GET /gremlin/v1/test/:id```: set new test ```:id```, that will be logged along with request/response logs
 
-```DELETE /gremlin/v1/test/:id```: remove the currently set test :id
+```DELETE /gremlin/v1/test/:id```: remove the currently set test ```:id```
