@@ -1,0 +1,14 @@
+es:
+    image: elasticsearch:1.7
+    command: elasticsearch -Des.index.analysis.analyzer.default.type=keyword
+    ports:
+        - "29200:9200"
+        - "29300:9300"
+logstash:
+    image: logstash
+    command: logstash -e " input {udp {codec=>json port=>8092}} output {elasticsearch {hosts=>es index=>gremlin}} "
+    ports:
+        - "8092:8092/udp"
+    links:
+        - es
+

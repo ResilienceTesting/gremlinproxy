@@ -1,0 +1,27 @@
+{
+  "services": [
+    {
+      "name": "Server",
+      "proxy": {
+	    "bindhost" : "0.0.0.0",
+        "port": 7777,
+        "protocol": "http"
+      },
+      "loadbalancer": {
+        "hosts": [
+	      "54.175.222.246",
+          "https://httpbin.org"
+        ],
+        "mode": "roundrobin"
+      }
+    }
+  ],
+  "router": {
+      "name": "Client",
+      "port": 9876,
+      "trackingheader": "X-Gremlin-ID"
+  },
+  "loglevel": "debug",
+  "logjson": true,
+  "logstash": ""
+}
