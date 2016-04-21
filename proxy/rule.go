@@ -2,7 +2,7 @@ package proxy
 
 import (
 	"errors"
-	"github.com/gremlinproxy/config"
+	"github.com/ResilienceTesting/gremlinproxy/config"
 	str "strings"
 	"time"
 
