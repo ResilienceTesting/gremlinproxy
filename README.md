@@ -26,7 +26,7 @@ gets back a HTTP 404, HTTP 503, etc.), delayed, or rewritten. The
 proxy can be controlled remotely using a REST API. Rules for various
 fault injection actions can be installed through this API. The
 [Gremlin resliency testing framework]
-(https://github.ibm.com/shriram/gremlinsdk) provides a Python-based
+(https://github.com/ResilienceTesting/gremlinsdk) provides a Python-based
 control plane library, to write high-level recipes, that will be
 automatically broken down into low-level fault injection commands to
 be executed by the gremlin proxy.
@@ -89,9 +89,11 @@ be subjected to fault injection.
 - Run ``./gremlinproxy -c yourconfig.json``
 
 ### Proxy REST API
-GET("/gremlin/v1"): simple hello world test
+```GET /gremlin/v1```: simple hello world test
 
-POST("/gremlin/v1/rules/add"): add a Rule. Rule must be posted as a JSON. Format is as follows
+```POST /gremlin/v1/rules/add```: add a Rule. Rule must be posted as a JSON. Format is as follows
+
+```javascript
 {
   source: <source service name>,
   dest: <destination service name>,
@@ -112,17 +114,20 @@ POST("/gremlin/v1/rules/add"): add a Rule. Rule must be posted as a JSON. Format
   searchstring: <string> string to replace when Mangle is enabled
   replacestring: <string> string to replace with for Mangle fault
 }
+```
 
-POST("/gremlin/v1/rules/remove"): remove the rule specified in the message body (see rule format above)
+```POST /gremlin/v1/rules/remove``` : remove the rule specified in the message body (see rule format above)
 
-GET("/gremlin/v1//rules/list"): list all installed rules
+```GET /gremlin/v1/rules/list```: list all installed rules
 
-DELETE("/gremlin/v1/rules"): clear all rules
+```DELETE /gremlin/v1/rules```: clear all rules
 
-GET("/gremlin/v1/proxy/<service>/instances"): get list of instances for for <service>
-PUT("/gremlin/v1/proxy/<service>/<instances>"): set list of instances for <service>. <instances> is a comma separated list.
-DELETe("/gremlin/v1/proxy/<service>/instances"): clear list of instances under <service>
+```GET /gremlin/v1/proxy/:service/instances```: get list of instances for for :service
 
-GET("/gremlin/v1/test/<id>"): set new test <id>, that will be logged along with request/response logs
+```PUT /gremlin/v1/proxy/:service/:instances```: set list of instances for :service. :instances is a comma separated list.
 
-DELETE("/gremlin/v1/test/<id>"): remove the currently set test <id>
+```DELETE /gremlin/v1/proxy/:service/instances```: clear list of instances under :service
+
+```GET /gremlin/v1/test/:id```: set new test :id, that will be logged along with request/response logs
+
+```DELETE /gremlin/v1/test/:id```: remove the currently set test :id
