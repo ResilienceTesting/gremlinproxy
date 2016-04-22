@@ -323,16 +323,16 @@ func (p *Proxy) proxyTCP(conn *net.TCPConn) {
 /* FIXME: BUG This method reads requests/replies into memory.
 * DO NOT use this on very large size requests.
 */
-func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	reqID := r.Header.Get(config.TrackingHeader)
+func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	reqID := req.Header.Get(config.TrackingHeader)
 	var rule Rule
 	var decodedData []byte
 	var cont bool
-	data, err := readBody(r.Body)
+	data, err := readBody(req.Body)
 	if (reqID != "") {
-		decodedData, err := decodeBody(data, r.Header.Get("content-type"),
-			r.Header.Get("content-encoding"))
 		// Process the request, see if any rules match it.
+		decodedData, err := decodeBody(data, req.Header.Get("content-type"),
+			req.Header.Get("content-encoding"))
 		if err != nil {
 			globallog.WithFields(logrus.Fields{
 				"service": p.name,
@@ -340,15 +340,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"errmsg":  err.Error()}).Error("Error reading HTTP request")
 			rule = NopRule
 		} else {
-			/**
-		// Check if we were expecting it on the wire:
-		p.expectCheck(decodedData)
-		**/
+			// Check if we were expecting it on the wire:
+			//p.expectCheck(decodedData)
+			
 			// Get the rule
 			rule = p.getRule(Request, reqID, decodedData)
-			//globallog.WithField("Got rule ", rule.ToConfig()).Debug("getRule()")
 		}
-		cont := p.executeRequestRule(rule, w, r, reqID, decodedData)
+		cont := p.executeRequestRule(reqID, rule, req, decodedData, w)
 		if !cont {
 			return
 		}
@@ -364,7 +362,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if (!p.httpregexp.MatchString(host)) {
 		host = "http://"+host
 	}
-	newreq, err := http.NewRequest(r.Method, host+r.RequestURI, bytes.NewReader(data))
+	newreq, err := http.NewRequest(req.Method, host+req.RequestURI, bytes.NewReader(data))
 	if err != nil {
 		status := http.StatusBadRequest
 		http.Error(w, http.StatusText(status), status)
@@ -376,7 +374,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Copy over the headers
-	for k, v := range r.Header {
+	for k, v := range req.Header {
 		if k != "Host" {
 			for _, vv := range v {
 				newreq.Header.Set(k, vv)
@@ -389,14 +387,14 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Make a connection
 	starttime := time.Now()
 	resp, err := p.httpclient.Do(newreq)
-	dur := time.Since(starttime)
+	respTime := time.Since(starttime)
 	if err != nil {
 		status := http.StatusInternalServerError
 		http.Error(w, http.StatusText(status), status)
 		globallog.WithFields(
 			logrus.Fields{
 				"service":  p.name,
-				"duration": dur.String(),
+				"duration": respTime.String(),
 				"status":   -1,
 				"errmsg":   err.Error(),
 			}).Info("Request proxying failed")
@@ -406,30 +404,32 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Read the response and see if it matches any rules
 	rule = NopRule
 	data, err = readBody(resp.Body)
-	decodedData, err = decodeBody(data, resp.Header.Get("content-type"),
-		resp.Header.Get("content-encoding"))
-	if err != nil {
-		globallog.WithFields(logrus.Fields{
-			"service": p.name,
-			"reqID":   reqID,
-			"errmsg":  err.Error()}).Error("Error reading HTTP reply")
-	}
 	resp.Body.Close()
-	if (reqID == "") {
-		goto forward_response
-	}
-	/*
-	// Check if we were expecting this
-	p.expectCheck(decodedData)
-	*/
-	// Execute rules, if any
-	rule = p.getRule(Response, reqID, decodedData)
-	cont = p.executeResponseRule(rule, w, resp, reqID, decodedData, dur)
-	if !cont {
-		return
+	if (reqID != "") {
+		decodedData, err = decodeBody(data, resp.Header.Get("content-type"),
+			resp.Header.Get("content-encoding"))
+
+		if err != nil {
+			globallog.WithFields(logrus.Fields{
+				"service": p.name,
+				"reqID":   reqID,
+				"errmsg":  err.Error()}).Error("Error reading HTTP reply")
+			rule = NopRule
+		} else {
+			// Check if we were expecting this
+			//p.expectCheck(decodedData)
+
+			// Execute rules, if any
+			rule = p.getRule(Response, reqID, decodedData)
+		}
+	
+		cont = p.executeResponseRule(reqID, rule, resp, decodedData, respTime, w)
+		if !cont {
+			return
+		}
 	}
 
-forward_response:
+	//return resp to caller
 	for k, v := range resp.Header {
 		for _, vv := range v {
 			w.Header().Set(k, vv)
@@ -446,7 +446,7 @@ forward_response:
 
 // Executes the rule on the request path or response path. ResponseWriter corresponds to the caller's connection
 // Returns a bool, indicating whether we should continue request processing further or not
-func (p *Proxy) doAborts(rule Rule, w http.ResponseWriter, reqID string) bool {
+func (p *Proxy) doHTTPAborts(reqID string, rule Rule, w http.ResponseWriter) bool {
 
 	if (rule.ErrorCode < 0)	{
 		hj, ok := w.(http.Hijacker)
@@ -495,114 +495,97 @@ func (p *Proxy) doAborts(rule Rule, w http.ResponseWriter, reqID string) bool {
 	return true
 }
 
-// Wrapper function around executeRule for Request path
-func (p *Proxy) executeRequestRule(rule Rule, w http.ResponseWriter, r *http.Request,
-	reqID string, data []byte) bool {
 
-	if (reqID == "") || !rule.Enabled {
-		return true
-	}
+// Fault injection happens here.
+// Log every request with valid reqID irrespective of fault injection
+func (p *Proxy) executeRequestRule(reqID string, rule Rule, req *http.Request, body []byte, w http.ResponseWriter) bool {
 
+	var actions []string
+	delay, errorCode, retVal := time.Duration(0), -2, true
 	t := time.Now()
-	globallog.WithField("rule", rule.ToConfig()).Debug("execRequestRule")
 
-	if ((rule.DelayProbability > 0.0) &&
-		drawAndDecide(rule.DelayDistribution, rule.DelayProbability)) {
-		proxylog.WithFields(logrus.Fields{
-			"dest": p.name,
-			"source": config.ProxyFor,
-			"protocol" : "http",
-			"trackingheader":  config.TrackingHeader,
-			"action" : "delay",
-			"rule": rule.ToConfig(),
-			// "body":    string(data),
-			"testid": p.getmyID(),
-			"reqID":  reqID,
-			"ts" : t.Format("2006-01-02T15:04:05.999999"),
-			"uri":    r.RequestURI}).Info("Request")
-		time.Sleep(rule.DelayTime)
+	if rule.Enabled {
+		globallog.WithField("rule", rule.ToConfig()).Debug("execRequestRule")
+
+		if ((rule.DelayProbability > 0.0) &&
+			drawAndDecide(rule.DelayDistribution, rule.DelayProbability)) {
+			// In future, this could be dynamically computed -- variable delays
+			delay = rule.DelayTime
+			actions = append(actions, "delay")
+			time.Sleep(rule.DelayTime)
+		}
+
+		if ((rule.AbortProbability > 0.0) &&
+			drawAndDecide(rule.AbortDistribution, rule.AbortProbability) &&
+			p.doHTTPAborts(reqID, rule, w)) {
+			actions = append(actions, "abort")
+			errorCode = rule.ErrorCode
+			retVal = false
+		}
 	}
 
-	if ((rule.AbortProbability > 0.0) &&
-		drawAndDecide(rule.AbortDistribution, rule.AbortProbability) &&
-		p.doAborts(rule, w, reqID)) {
-		proxylog.WithFields(logrus.Fields{
-			"dest": p.name,
-			"source": config.ProxyFor,
-			"protocol" : "http",
-			"trackingheader":  config.TrackingHeader,
-			"action" : "abort",
-			"rule": rule.ToConfig(),
-			"testid": p.getmyID(),
-			"reqID":  reqID,
-			"errorcode": rule.ErrorCode,
-			"ts" : t.Format("2006-01-02T15:04:05.999999"),
-			"uri":    r.RequestURI}).Info("Request")
-		return false
-	}
-	return true
+	proxylog.WithFields(logrus.Fields{
+		"dest": p.name,
+		"source": config.ProxyFor,
+		"protocol" : "http",
+		"trackingheader":  config.TrackingHeader,
+		"reqID":  reqID,
+		"testid": p.getmyID(),
+		"actions" : "["+str.Join(actions, ",")+"]",
+		"delaytime": delay.Nanoseconds()/(1000*1000), //actual time req was delayed in milliseconds
+		"errorcode": errorCode, //actual error injected or -2
+		"uri":  req.RequestURI,
+		"ts" : t.Format("2006-01-02T15:04:05.999999"),
+		"rule": rule.ToConfig(),
+	}).Info("Request")
+
+	return retVal
 }
 
 // Wrapper function around executeRule for the Response path
 //TODO: decide if we want to log body and header
-func (p *Proxy) executeResponseRule(rule Rule, w http.ResponseWriter, resp *http.Response,
-	reqID string, data []byte, after time.Duration) bool {
+func (p *Proxy) executeResponseRule(reqID string, rule Rule, resp *http.Response, body []byte, after time.Duration, w http.ResponseWriter) bool {
 
+	var actions []string
+	delay, errorCode, retVal := time.Duration(0), -2, true
 	t := time.Now()
+
+	if rule.Enabled {
+		if ((rule.DelayProbability > 0.0) &&
+			drawAndDecide(rule.DelayDistribution, rule.DelayProbability)) {
+			// In future, this could be dynamically computed -- variable delays
+			delay = rule.DelayTime
+			actions = append(actions, "delay")
+			time.Sleep(rule.DelayTime)
+		}
+
+		if ((rule.AbortProbability > 0.0) &&
+			drawAndDecide(rule.AbortDistribution, rule.AbortProbability) &&
+			p.doHTTPAborts(reqID, rule, w)) {
+			actions = append(actions, "abort")
+			errorCode = rule.ErrorCode
+			retVal = false
+		}
+	}
+
 	proxylog.WithFields(logrus.Fields{
 		"dest": p.name,
-		"source":     config.ProxyFor,
-		"trackingheader" : config.TrackingHeader,
+		"source": config.ProxyFor,
 		"protocol" : "http",
-		// "header":   resp.Header,
-		"rule": rule.ToConfig(),
-		// "body":     string(data),
-		"status":   resp.Header.Get("Status"),
+		"trackingheader":  config.TrackingHeader,
+		"reqID":  reqID,
+		"testid": p.getmyID(),
+		"actions" : "["+str.Join(actions, ",")+"]",
+		"delaytime": delay.Nanoseconds()/(1000*1000), //actual time resp was delayed in milliseconds
+		"errorcode": errorCode, //actual error injected or -2
+		"status": resp.Header.Get("Status"),
 		"duration": after.String(),
-		"testid":   p.getmyID(),
 		"ts" : t.Format("2006-01-02T15:04:05.999999"),
-		"reqID":    reqID}).Info("Response")
+		//log header/body?
+		"rule": rule.ToConfig(),
+	}).Info("Response")
 	
-	if (reqID == "") || !rule.Enabled {
-		return true
-	}
-
-	if ((rule.DelayProbability > 0.0) &&
-		drawAndDecide(rule.DelayDistribution, rule.DelayProbability)) {
-		proxylog.WithFields(logrus.Fields{
-			"dest": p.name,
-			"source": config.ProxyFor,
-			"protocol" : "http",
-			"trackingheader":  config.TrackingHeader,
-			"action" : "delay",
-			"rule": rule.ToConfig(),
-			// "body":    string(data),
-			"testid": p.getmyID(),
-			"reqID":  reqID,
-			"ts" : t.Format("2006-01-02T15:04:05.999999"),
-			}).Info("Response")
-		time.Sleep(rule.DelayTime)
-	}
-
-	if ((rule.AbortProbability > 0.0) &&
-		drawAndDecide(rule.AbortDistribution, rule.AbortProbability) &&
-		p.doAborts(rule, w, reqID)) {
-		proxylog.WithFields(logrus.Fields{
-			"dest": p.name,
-			"source": config.ProxyFor,
-			"protocol" : "http",
-			"trackingheader":  config.TrackingHeader,
-			"action" : "abort",
-			"rule": rule.ToConfig(),
-			"testid": p.getmyID(),
-			"reqID":  reqID,
-			"errorcode": rule.ErrorCode,
-			"ts" : t.Format("2006-01-02T15:04:05.999999"),
-			}).Info("Response")
-		return false
-	}
-
-	return true
+	return retVal
 }
 
 // AddRule adds a new rule to the proxy. All requests/replies carrying the trackingheader will be checked
