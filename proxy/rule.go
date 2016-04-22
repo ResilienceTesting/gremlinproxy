@@ -72,13 +72,15 @@ var distributionMap = map[ProbabilityDistribution]string{
 
 //message channel type between client and server, via the proxy
 const (
-	Request MessageType = iota
+	MTypeUnknown MessageType = iota
+	Request
 	Response
 	Publish
 	Subscribe
 )
 
 var rMap = map[MessageType]string{
+	MTypeUnknown: "unknown",
 	Request: "request",
 	Response: "response",
 	Publish: "publish",
@@ -222,9 +224,6 @@ func NewRule(c config.RuleConfig) (Rule, error) {
 			return NopRule, err
 		}
 	} else {
-		if (r.DelayProbability == 0.0) {
-			return NopRule, errors.New("Invalid Delay (0s) when delayprobability >0.0")
-		}
 		r.DelayTime = time.Duration(0)
 	}
 
