@@ -128,6 +128,6 @@ be subjected to fault injection.
 
 ```DELETE /gremlin/v1/proxy/:service/instances```: clear list of instances under ```:service```
 
-```GET /gremlin/v1/test/:id```: set new test ```:id```, that will be logged along with request/response logs
+```PUT /gremlin/v1/test/:id```: set new test ```:id```, that will be logged along with request/response logs
 
 ```DELETE /gremlin/v1/test/:id```: remove the currently set test ```:id```
