@@ -1,20 +1,8 @@
 FROM alpine:3.1
 
-RUN mkdir /etc/gremlinproxy
-RUN mkdir /var/log/gremlinproxy
-ADD example-config.json /etc/gremlinproxy/
-
-# Define mountable directories.
-VOLUME ["/etc/gremlinproxy", "/var/log/gremlinproxy"]
-
-# executable only
-ADD gremlinproxy /usr/bin/
-
-# Define working directory.
-WORKDIR /etc/gremlinproxy
-
-# Define default cmd
-CMD ["gremlinproxy", "-c", "/etc/gremlinproxy/example-config.json"]
+ADD example-config.json /opt/gremlinproxy/
+ADD gremlinproxy /opt/gremlinproxy/
+CMD ["/opt/gremlinproxy/gremlinproxy", "-c", "/opt/gremlinproxy/example-config.json"]
 
 # Expose control port.
 EXPOSE 9876
