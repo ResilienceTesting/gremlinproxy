@@ -14,13 +14,13 @@ var TrackingHeader string
 var ProxyFor string
 
 var GlobalLogger = &log.Logger{
-	Out:       os.Stdout,
+	Out:       os.Stderr,
 	Formatter: new(log.TextFormatter),
 	Hooks:     make(log.LevelHooks),
 	Level:     log.WarnLevel,
 }
 var ProxyLogger = &log.Logger{
-	Out:       os.Stdout,
+	Out:       os.Stderr,
 	Formatter: new(log.JSONFormatter),
 	Hooks:     make(log.LevelHooks),
 	Level:     log.InfoLevel,

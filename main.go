@@ -33,11 +33,11 @@ func main() {
 		if err == nil {
 			config.ProxyLogger.Out = conn
 		} else {
-			config.ProxyLogger.Out = os.Stdout
+			config.ProxyLogger.Out = os.Stderr
 			config.ProxyLogger.Warn("Could not establish connection to logstash, logging to stderr")
 		}
 	} else { //else console
-		config.ProxyLogger.Out = os.Stdout
+		config.ProxyLogger.Out = os.Stderr
 	}
 	// parse and set our log level
 	if conf.LogLevel != "" {
