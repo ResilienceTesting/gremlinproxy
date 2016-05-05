@@ -578,7 +578,7 @@ func (p *Proxy) executeResponseRule(reqID string, rule Rule, resp *http.Response
 		"actions" : "["+str.Join(actions, ",")+"]",
 		"delaytime": delay.Nanoseconds()/(1000*1000), //actual time resp was delayed in milliseconds
 		"errorcode": errorCode, //actual error injected or -2
-		"status": resp.Header.Get("Status"),
+		"status": resp.StatusCode,
 		"duration": after.String(),
 		"ts" : t.Format("2006-01-02T15:04:05.999999"),
 		//log header/body?
