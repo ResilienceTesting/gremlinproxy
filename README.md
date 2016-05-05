@@ -85,7 +85,7 @@ be subjected to fault injection.
 - Before you run the proxy, you need to run logstash server and elasticsearch. Run ``docker-compose -f compose-logstash-elasticsearch.yml up -d``
 - Setup your go environment and GOPATH variable
 - Clone the repository to ``$GOPATH/go/src/github.com/gremlin`` folder.
-- Build: ``go dep && go build``
+- Build: ``go get && go build``
 - Run ``./gremlinproxy -c yourconfig.json``
 
 ### Proxy REST API
